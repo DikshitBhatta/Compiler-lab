@@ -8,7 +8,7 @@
 
 using namespace std;
 
-//  Grammar definition
+// Grammar definition
 struct Production {
     string lhs;
     vector<string> rhs;
@@ -17,26 +17,26 @@ struct Production {
 vector<Production> G;            // numbered grammar productions
 set<string> terminals;
 set<string> nonTerminals;
-const string ENDM = "$";         // end-of-input marker
-const string AUG  = "S'";        // augmented start symbol
+const string endMark = "$";      // end-of-input marker
+const string augStart = "S'";    // augmented start symbol
 
 bool isTerminal(const string& s)    { return terminals.count(s)    > 0; }
 bool isNonTerminal(const string& s) { return nonTerminals.count(s) > 0; }
 
 void defineGrammar() {
-    G.push_back({"S'", {"S"}});          
-    G.push_back({"S",  {"L", "=", "R"}}); 
-    G.push_back({"S",  {"R"}});          
-    G.push_back({"L",  {"*", "R"}});     
-    G.push_back({"L",  {"id"}});         
-    G.push_back({"R",  {"L"}});          
+    G.push_back({"S'", {"S"}});
+    G.push_back({"S",  {"L", "=", "R"}});
+    G.push_back({"S",  {"R"}});
+    G.push_back({"L",  {"*", "R"}});
+    G.push_back({"L",  {"id"}});
+    G.push_back({"R",  {"L"}});
 
     nonTerminals = {"S'", "S", "L", "R"};
-    terminals    = {"=", "*", "id", ENDM};
+    terminals    = {"=", "*", "id", endMark};
 }
 
-string showProduction(int idx) {
-    const Production& p = G[idx];
+string showProduction(int index) {
+    const Production& p = G[index];
     string s = p.lhs + " -> ";
     for (size_t i = 0; i < p.rhs.size(); ++i) {
         s += p.rhs[i];
@@ -45,7 +45,7 @@ string showProduction(int idx) {
     return s;
 }
 
-//  FIRST sets 
+// FIRST sets
 map<string, set<string>> FIRST;
 
 void computeFirst() {
@@ -74,8 +74,7 @@ set<string> firstOfSeq(const vector<string>& seq) {
     return res;
 }
 
-//  LR(1) items and sets
-
+// LR(1) items and sets
 struct Item {
     int    prod;   // index into G
     int    dot;    // position of the dot inside the body
@@ -136,37 +135,36 @@ ItemSet goTo(const ItemSet& I, const string& X) {
 }
 
 
-//  Canonical collection of sets of LR(1) items
-vector<ItemSet>            C;        // the states
+// Canonical collection of sets of LR(1) items
+vector<ItemSet>            S;        // the states
 map<pair<int,string>, int> TRANS;    // raw goto transitions  (state, symbol) -> state
 
 
-const vector<string> SYMBOL_ORDER = {"S", "L", "R", "*", "id", "="};
+const vector<string> symOrder = {"S", "L", "R", "*", "id", "="};
 
 int findState(const ItemSet& s) {
-    for (int i = 0; i < (int)C.size(); ++i)
-        if (C[i] == s) return i;
+    for (int i = 0; i < (int)S.size(); ++i)
+        if (S[i] == s) return i;
     return -1;
 }
 
 void buildCanonicalCollection() {
-    ItemSet I0 = closure({ Item{0, 0, ENDM} });   // closure of { [S' -> .S , $] }
-    C.push_back(I0);
+    ItemSet I0 = closure({ Item{0, 0, endMark} });   // closure of { [S' -> .S , $] }
+    S.push_back(I0);
 
-    for (int i = 0; i < (int)C.size(); ++i) {
-        for (const string& X : SYMBOL_ORDER) {
-            ItemSet g = goTo(C[i], X);
+    for (int i = 0; i < (int)S.size(); ++i) {
+        for (const string& X : symOrder) {
+            ItemSet g = goTo(S[i], X);
             if (g.empty()) continue;
             int j = findState(g);
-            if (j == -1) { C.push_back(g); j = (int)C.size() - 1; }
+            if (j == -1) { S.push_back(g); j = (int)S.size() - 1; }
             TRANS[{i, X}] = j;
         }
     }
 }
 
 
-//  ACTION and GOTO tables
-
+// ACTION and GOTO tables
 map<int, map<string,string>> ACTION;   // ACTION[state][terminal]    = "sN" | "rN" | "acc"
 map<int, map<string,int>>    GOTOT;     // GOTOT [state][nonterminal] = N
 vector<string>               conflicts;
@@ -180,8 +178,8 @@ void recordAction(int state, const string& sym, const string& act) {
 }
 
 void buildTables() {
-    for (int i = 0; i < (int)C.size(); ++i) {
-        for (const Item& it : C[i]) {
+    for (int i = 0; i < (int)S.size(); ++i) {
+        for (const Item& it : S[i]) {
             const Production& p = G[it.prod];
             if (it.dot < (int)p.rhs.size()) {
                 string a = p.rhs[it.dot];
@@ -190,21 +188,21 @@ void buildTables() {
                 }
             } else {                                        // dot at the end
                 if (it.prod == 0) {                         // S' -> S .
-                    if (it.look == ENDM) recordAction(i, ENDM, "acc");
+                    if (it.look == endMark) recordAction(i, endMark, "acc");
                 } else {                                    // reduce
                     recordAction(i, it.look, "r" + to_string(it.prod));
                 }
             }
         }
         for (const string& nt : nonTerminals) {
-            if (nt == AUG) continue;
+            if (nt == augStart) continue;
             if (TRANS.count({i, nt})) GOTOT[i][nt] = TRANS[{i, nt}];
         }
     }
 }
 
 
-//  Printing helpers
+// Printing helpers
 string showItem(const Item& it) {
     const Production& p = G[it.prod];
     string s = p.lhs + " -> ";
@@ -236,13 +234,13 @@ void printFirst() {
 
 void printStates() {
     cout << "Canonical collection of sets of LR(1) items  ("
-         << C.size() << " states):\n\n";
-    for (int i = 0; i < (int)C.size(); ++i) {
+         << S.size() << " states):\n\n";
+    for (int i = 0; i < (int)S.size(); ++i) {
         cout << "I" << i << ":\n";
-        for (const Item& it : C[i])
+        for (const Item& it : S[i])
             cout << "    [ " << showItem(it) << " ]\n";
         // outgoing transitions
-        for (const string& X : SYMBOL_ORDER)
+        for (const string& X : symOrder)
             if (TRANS.count({i, X}))
                 cout << "      goto(I" << i << ", " << X << ") = I" << TRANS[{i, X}] << "\n";
         cout << "\n";
@@ -250,7 +248,7 @@ void printStates() {
 }
 
 void printTable() {
-    vector<string> terms = {"id", "*", "=", ENDM};
+    vector<string> terms = {"id", "*", "=", endMark};
     vector<string> nts   = {"S", "L", "R"};
 
     cout << "Parsing Table  (ACTION | GOTO):\n\n";
@@ -261,7 +259,7 @@ void printTable() {
     cout << "\n";
     cout << string(7 + 7 * terms.size() + 1 + 6 * nts.size(), '-') << "\n";
 
-    for (int i = 0; i < (int)C.size(); ++i) {
+    for (int i = 0; i < (int)S.size(); ++i) {
         cout << setw(7) << left << ("I" + to_string(i));
         for (const string& t : terms) {
             string cell = ACTION[i].count(t) ? ACTION[i][t] : "";
@@ -278,8 +276,7 @@ void printTable() {
 }
 
 
-//  The LR parsing driver
-
+// The LR parsing driver
 string join(const vector<string>& v, int from = 0) {
     string s;
     for (int i = from; i < (int)v.size(); ++i) {
@@ -299,7 +296,7 @@ string joinStates(const vector<int>& v) {
 
 bool parse(vector<string> input, const string& label) {
     cout << "Parsing string : " << join(input) << "\n";
-    input.push_back(ENDM);
+    input.push_back(endMark);
 
     vector<int>    stStack  = {0};   // state stack
     vector<string> symStack;         // symbol stack (display only)
@@ -358,8 +355,7 @@ bool parse(vector<string> input, const string& label) {
 }
 
 
-//  main
-
+// main
 int main() {
     defineGrammar();
     computeFirst();
@@ -381,7 +377,7 @@ int main() {
         cout << "\n";
     }
 
-    //  Test strings 
+    // Test strings
 
     // string "id = id * id" is "id = * id" (id = *id).
     parse({"id", "=", "*", "id"}, "id = * id");
